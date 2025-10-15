@@ -23,8 +23,11 @@ def setup():
     net.addLink(h1, s1)
     net.addLink(h2, s1)
 
-    info("*** Starting network\n")
+    info("*** Starting network\n\n")
     net.start()
+
+    s1_ip = s1.IP()
+    info(f"*** Switch IP address: {s1_ip}\n")
 
     nat_ip = nat.IP()
     info(f"*** NAT IP address: {nat_ip}\n")
@@ -36,7 +39,9 @@ def setup():
 
     info("*** Enabling forwarding and NAT rules\n")
     nat.cmd("sysctl -w net.ipv4.ip_forward=1")
-    nat.cmd("iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE")
+    nat_ext_if = nat.defaultIntf().__str__().split('-')[1]
+    info("NAT external interface: " + nat_ext_if + "\n")
+    nat.cmd(f"iptables -t nat -A POSTROUTING -o {nat_ext_if} -j MASQUERADE")
 
     info("*** Ready! Try 'h1 ping -c 3 8.8.8.8'\n")
     CLI(net)
