@@ -12,6 +12,10 @@ analyze:
 	@echo "uv path: $(uv)"
 	$(su_uv_run) analyze.py
 
+clear:
+	@echo "Clearing Mininet state..."
+	sudo mn -c
+
 cloud/simulation:
 	@echo "Starting cloud MQTT test..."
 	@echo "uv path: $(uv)"
