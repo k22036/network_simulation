@@ -4,6 +4,7 @@ from mininet.link import TCLink
 from mininet.log import setLogLevel, info
 import time
 
+
 def run_cloud_mqtt():
     net = Mininet(controller=OVSController, link=TCLink)
     # info('\n*** Adding controller\n')
@@ -28,44 +29,53 @@ def run_cloud_mqtt():
     for host in [h1, h2, broker]:
         host.cmd('apt-get update -y')
         host.cmd('apt-get install -y mosquitto mosquitto-clients tcpdump python3-pip')
-    h1.cmd('pip install paho-mqtt')
-    h2.cmd('pip install paho-mqtt')
+        output = host.cmd('curl -LsSf https://astral.sh/uv/install.sh | sh')
+        info("uv: " + output + '\n\n')
+    output = h1.cmd('uv add paho-mqtt')
+    info("h1 uv: " + output + '\n\n')
+    h2.cmd('uv add paho-mqtt')
 
     info('\n*** Starting MQTT Broker on broker node\n')
     broker.cmd('mosquitto -d')
 
     info('\n*** Starting TCPDump to capture traffic\n')
-    h1.cmd('tcpdump -i h1-eth0 -w /tmp/h1.pcap &')
-    h2.cmd('tcpdump -i h2-eth0 -w /tmp/h2.pcap &')
-    broker.cmd('tcpdump -i h3-eth0 -w /tmp/broker.pcap &')
+    h1.cmd('tcpdump -i h1-eth0 -w /tmp/h1.pcap > /tmp/h1.log 2>&1 &')
+    time.sleep(1)  # Ensure h1's tcpdump starts
+    h2.cmd('tcpdump -i h2-eth0 -w /tmp/h2.pcap > /tmp/h2.log 2>&1 &')
+    time.sleep(1)  # Ensure h2's tcpdump starts
+    broker.cmd('tcpdump -i h3-eth0 -w /tmp/broker.pcap > /tmp/broker.log 2>&1 &')
+    time.sleep(1)  # Ensure broker's tcpdump starts
 
     info('\n*** Running MQTT test\n')
     # Subscriber script
-    h2.cmd('python3 - << EOF\n'
-           'import paho.mqtt.client as mqtt\n'
-           'import time\n'
-           'def on_message(client, userdata, msg):\n'
-           '    recv_time = time.time()\n'
-           '    sent_time = float(msg.payload.decode())\n'
-           '    print("Latency:", recv_time - sent_time)\n'
-           'client = mqtt.Client()\n'
-           'client.on_message = on_message\n'
-           'client.connect("10.0.0.3")\n'
-           'client.subscribe("latency")\n'
-           'client.loop_start()\n'
-           'time.sleep(15)\n'
-           'client.loop_stop()\n'
-           'EOF')
+    sub = h2.cmd('python3 - << EOF\n'
+                 'import paho.mqtt.client as mqtt\n'
+                 'import time\n'
+                 'def on_message(client, userdata, msg):\n'
+                 '    recv_time = time.time()\n'
+                 '    sent_time = float(msg.payload.decode())\n'
+                 '    print("Latency:", recv_time - sent_time)\n'
+                 'client = mqtt.Client()\n'
+                 'client.on_message = on_message\n'
+                 'client.connect("10.0.0.3")\n'
+                 'client.subscribe("latency")\n'
+                 'client.loop_start()\n'
+                 'time.sleep(15)\n'
+                 'client.loop_stop()\n'
+                 'EOF')
+
+    info("sub: " + sub + "\n\n")
 
     # Publisher script
     start_time = time.time()
-    h1.cmd(f'python3 - << EOF\n'
-           'import paho.mqtt.client as mqtt\n'
-           'import time\n'
-           'client = mqtt.Client()\n'
-           'client.connect("10.0.0.3")\n'
-           f'client.publish("latency", str({start_time}))\n'
-           'EOF')
+    pub = h1.cmd(f'python3 - << EOF\n'
+                 'import paho.mqtt.client as mqtt\n'
+                 'import time\n'
+                 'client = mqtt.Client()\n'
+                 'client.connect("10.0.0.3")\n'
+                 f'client.publish("latency", str({start_time}))\n'
+                 'EOF')
+    info("pub: " + pub + "\n\n")
 
     info('\n*** Waiting a few seconds to capture all packets\n')
     time.sleep(5)
@@ -79,6 +89,7 @@ def run_cloud_mqtt():
     info('\nPCAP files: /tmp/h1.pcap, /tmp/h2.pcap, /tmp/broker.pcap\n')
 
     net.stop()
+
 
 if __name__ == '__main__':
     setLogLevel('info')
